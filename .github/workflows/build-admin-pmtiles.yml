@@ -1,0 +1,54 @@
+name: Build Vietnam Admin PMTiles
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/build-admin-pmtiles.sh'
+      - '.github/workflows/build-admin-pmtiles.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libsqlite3-dev zlib1g-dev jq unzip
+
+      - name: Build tippecanoe
+        run: |
+          git clone --depth 1 https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          make -C /tmp/tippecanoe -j2
+          sudo make -C /tmp/tippecanoe install
+
+      - name: Install PMTiles CLI
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - run: |
+          go install github.com/protomaps/go-pmtiles/cmd/pmtiles@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build archive
+        run: bash tools/build-admin-pmtiles.sh
+
+      - name: Inspect output
+        run: |
+          ls -lh data/vietnam-admin.pmtiles
+          pmtiles show data/vietnam-admin.pmtiles || true
+
+      - name: Upload PMTiles artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vietnam-admin-pmtiles
+          path: data/vietnam-admin.pmtiles
+          if-no-files-found: error
+          compression-level: 0
