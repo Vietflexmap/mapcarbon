@@ -1,0 +1,12 @@
+{
+  "source_repository": "Vietflexmap/anhmap",
+  "source_commit": "e80f4ee9f1e167817e4a9af8402c0bca4052573e",
+  "source_url": "https://raw.githubusercontent.com/Vietflexmap/anhmap/e80f4ee9f1e167817e4a9af8402c0bca4052573e/index.html",
+  "pmtiles_bytes": 2086254,
+  "administrative_records": 3321,
+  "generated_at_utc": "2026-09-08T07:29:29.206133+00:00",
+  "source_layer": "admin",
+  "min_data_zoom": 4,
+  "max_data_zoom": 9,
+  "note": "Generated from the embedded pmtilesData/adminData in AnhMap. Do not edit generated files manually."
+}
