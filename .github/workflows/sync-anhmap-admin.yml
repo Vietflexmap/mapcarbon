@@ -8,6 +8,17 @@ on:
   schedule:
     - cron: '17 3 * * 1'
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'AnhMap branch, tag or commit to sync'
+        required: false
+        default: 'main'
+        type: string
+      force:
+        description: 'Rebuild even when the resolved source commit is unchanged'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -25,19 +36,45 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract PMTiles and administrative index from AnhMap
+      - name: Resolve, validate and extract AnhMap administrative data
         env:
-          ANHMAP_COMMIT: e80f4ee9f1e167817e4a9af8402c0bca4052573e
+          ANHMAP_REF: ${{ inputs.source_ref || 'main' }}
+          FORCE_SYNC: ${{ inputs.force || 'false' }}
         run: |
           python - <<'PY'
-          import base64, json, os, pathlib, re, urllib.request
+          import base64, hashlib, json, os, pathlib, re, urllib.parse, urllib.request
           from datetime import datetime, timezone
 
-          commit = os.environ['ANHMAP_COMMIT']
-          url = f'https://raw.githubusercontent.com/Vietflexmap/anhmap/{commit}/index.html'
-          req = urllib.request.Request(url, headers={'User-Agent':'CarbonVN-PMTiles-Sync/1.0'})
-          with urllib.request.urlopen(req, timeout=60) as response:
-              html = response.read().decode('utf-8')
+          repo = 'Vietflexmap/anhmap'
+          ref = (os.environ.get('ANHMAP_REF') or 'main').strip()
+          force = str(os.environ.get('FORCE_SYNC', '')).lower() in {'1', 'true', 'yes'}
+          headers = {'User-Agent': 'CarbonVN-PMTiles-Sync/2.0', 'Accept': 'application/vnd.github+json'}
+
+          def get_bytes(url, timeout=90):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=timeout) as response:
+                  return response.read()
+
+          api = f'https://api.github.com/repos/{repo}/commits/{urllib.parse.quote(ref, safe="")}'
+          resolved = json.loads(get_bytes(api).decode('utf-8'))
+          commit = resolved['sha']
+          data_dir = pathlib.Path('data')
+          data_dir.mkdir(exist_ok=True)
+          source_path = data_dir / 'anhmap-source.json'
+          pm_path = data_dir / 'vietnam-admin.pmtiles'
+          admin_path = data_dir / 'admin-data.json'
+
+          if not force and source_path.exists() and pm_path.exists() and admin_path.exists():
+              try:
+                  previous = json.loads(source_path.read_text(encoding='utf-8'))
+              except Exception:
+                  previous = {}
+              if previous.get('source_commit') == commit and pm_path.stat().st_size > 1000000 and admin_path.stat().st_size > 500000:
+                  print(f'AnhMap source is unchanged at {commit}; keeping generated files byte-for-byte unchanged.')
+                  raise SystemExit(0)
+
+          url = f'https://raw.githubusercontent.com/{repo}/{commit}/index.html'
+          html = get_bytes(url).decode('utf-8')
 
           def script_text(element_id):
               pattern = rf'<script[^>]*\bid=["\']{re.escape(element_id)}["\'][^>]*>(.*?)</script>'
@@ -50,6 +87,8 @@ jobs:
           pm_bytes = base64.b64decode(pm_b64, validate=True)
           if not pm_bytes.startswith(b'PMTiles'):
               raise SystemExit('Embedded pmtilesData is not a PMTiles archive')
+          if len(pm_bytes) < 1000000:
+              raise SystemExit(f'PMTiles archive unexpectedly small: {len(pm_bytes)} bytes')
 
           admin_text = script_text('adminData')
           admin = json.loads(admin_text)
@@ -57,23 +96,37 @@ jobs:
           if len(records) < 3000:
               raise SystemExit(f'Unexpected administrative record count: {len(records)}')
 
-          data = pathlib.Path('data')
-          data.mkdir(exist_ok=True)
-          (data / 'vietnam-admin.pmtiles').write_bytes(pm_bytes)
-          (data / 'admin-data.json').write_text(json.dumps(admin, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+          provinces = sorted({str(r.get('province', '')).strip() for r in records if str(r.get('province', '')).strip()})
+          if len(provinces) != 34:
+              raise SystemExit(f'Expected 34 provinces/cities, found {len(provinces)}')
+          bbox_count = sum(1 for r in records if isinstance(r.get('bbox'), list) and len(r['bbox']) == 4)
+          if bbox_count < 3000:
+              raise SystemExit(f'Too few records with bbox: {bbox_count}')
+
+          admin_minified = json.dumps(admin, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+          pm_sha = hashlib.sha256(pm_bytes).hexdigest()
+          admin_sha = hashlib.sha256(admin_minified).hexdigest()
+
+          pm_path.write_bytes(pm_bytes)
+          admin_path.write_bytes(admin_minified)
           source = {
-              'source_repository': 'Vietflexmap/anhmap',
+              'source_repository': repo,
+              'source_ref': ref,
               'source_commit': commit,
               'source_url': url,
               'pmtiles_bytes': len(pm_bytes),
+              'pmtiles_sha256': pm_sha,
               'administrative_records': len(records),
+              'province_count': len(provinces),
+              'records_with_bbox': bbox_count,
+              'admin_json_sha256': admin_sha,
               'generated_at_utc': datetime.now(timezone.utc).isoformat(),
               'source_layer': 'admin',
               'min_data_zoom': 4,
               'max_data_zoom': 9,
               'note': 'Generated from the embedded pmtilesData/adminData in AnhMap. Do not edit generated files manually.'
           }
-          (data / 'anhmap-source.json').write_text(json.dumps(source, ensure_ascii=False, indent=2), encoding='utf-8')
+          source_path.write_text(json.dumps(source, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
           print(json.dumps(source, ensure_ascii=False, indent=2))
           PY
 
@@ -85,6 +138,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No administrative data changes.'
           else
-            git commit -m 'Sync administrative PMTiles from AnhMap'
+            git commit -m 'Sync administrative PMTiles from latest AnhMap'
             git push
           fi
