@@ -1,4 +1,4 @@
-import { PMTiles } from 'https://cdn.jsdelivr.net/npm/pmtiles@4.3.0/+esm';
+import { PMTiles } from 'https://cdn.jsdelivr.net/npm/pmtiles@4.5.0/+esm';
 import { VectorTile } from 'https://cdn.jsdelivr.net/npm/@mapbox/vector-tile@2.0.4/+esm';
 import Pbf from 'https://cdn.jsdelivr.net/npm/pbf@4.0.1/+esm';
 
@@ -11,7 +11,7 @@ const CONFIG = Object.freeze({
   maxDataZoom: 9,
   wardMinDisplayZoom: 7,
   tileSize: 256,
-  cacheName: 'carbonvn-anhmap-pmtiles-v1',
+  cacheName: 'carbonvn-anhmap-pmtiles-v2',
   vietnamBounds: [[7.180931, 102.143914], [23.392643, 117.835457]]
 });
 
@@ -28,24 +28,38 @@ class MemorySource {
 }
 
 async function loadArchive(url) {
+  const absoluteUrl = new URL(url, window.location.href).href;
   let response;
   if ('caches' in window) {
     const cache = await caches.open(CONFIG.cacheName);
-    response = await cache.match(url);
+    response = await cache.match(absoluteUrl);
     if (!response) {
-      response = await fetch(url, { cache: 'no-cache' });
-      if (!response.ok) throw new Error(`PMTiles HTTP ${response.status}`);
-      await cache.put(url, response.clone());
+      try {
+        response = await fetch(absoluteUrl, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`PMTiles HTTP ${response.status}`);
+        await cache.put(absoluteUrl, response.clone());
+        const target = new URL(absoluteUrl);
+        for (const request of await cache.keys()) {
+          const candidate = new URL(request.url);
+          if (candidate.pathname === target.pathname && candidate.href !== target.href) await cache.delete(request);
+        }
+      } catch (error) {
+        const target = new URL(absoluteUrl);
+        const fallback = (await cache.keys()).find(request => new URL(request.url).pathname === target.pathname);
+        if (!fallback) throw error;
+        response = await cache.match(fallback);
+        console.warn('Đang dùng PMTiles hành chính cache cũ vì bản mới chưa khả dụng.', error);
+      }
     }
   } else {
-    response = await fetch(url);
+    response = await fetch(absoluteUrl, { cache: 'no-store' });
     if (!response.ok) throw new Error(`PMTiles HTTP ${response.status}`);
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.byteLength < 100 || String.fromCharCode(...bytes.slice(0, 7)) !== 'PMTiles') {
     throw new Error('Archive hành chính không phải PMTiles hợp lệ.');
   }
-  return new PMTiles(new MemorySource(bytes, url));
+  return new PMTiles(new MemorySource(bytes, absoluteUrl));
 }
 
 function pointInRing(x, y, ring) {
