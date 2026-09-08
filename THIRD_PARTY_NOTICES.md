@@ -14,10 +14,25 @@ Leaflet 1.9.4 — BSD-2-Clause. Vietflex Map is built on Leaflet and preserves L
 
 ## PMTiles
 
-PMTiles JavaScript reference implementation — BSD-3-Clause.
+PMTiles — BSD-3-Clause.
 
 - Project: https://github.com/protomaps/PMTiles
-- Intended use in this project: optional raster PMTiles adapter for an offline Vietnam basemap supplied by the deployer.
+- CarbonVN uses the PMTiles format/CLI in the optional administrative-boundary build pipeline.
+- `data/vietnam-admin.pmtiles` is generated from sourced GeoJSON; it is not claimed to originate from `Vietflexmap/anhmap`.
+
+## Vietnam administrative GIS dataset
+
+Vietnamese Provinces Database by Thang Le Quoc — MIT License.
+
+- Project: https://github.com/thanglequoc/vietnamese-provinces-database
+- CarbonVN uses the post-reorganization administrative metadata and GeoJSON boundary exports for 34 provinces and their ward/commune/special-zone units.
+- Upstream license copyright notice is retained by reference and the upstream MIT terms apply to copied/derived dataset portions.
+
+## Vietflexmap/anhmap
+
+- Project: https://github.com/Vietflexmap/anhmap
+- CarbonVN reuses the interaction concept/hierarchy for province → ward/commune lookup and offline-oriented map workflow.
+- At the time of the v2.2 integration, `anhmap` did not expose a standalone `.pmtiles` archive in its repository tree; CarbonVN therefore does not mislabel another geometry source as an `anhmap` PMTiles file.
 
 ## OpenStreetMap
 
