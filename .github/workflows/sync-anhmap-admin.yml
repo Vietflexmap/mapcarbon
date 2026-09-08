@@ -1,0 +1,90 @@
+name: Sync AnhMap administrative PMTiles
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sync-anhmap-admin.yml'
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-anhmap-admin
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout mapcarbon
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract PMTiles and administrative index from AnhMap
+        env:
+          ANHMAP_COMMIT: e80f4ee9f1e167817e4a9af8402c0bca4052573e
+        run: |
+          python - <<'PY'
+          import base64, json, os, pathlib, re, urllib.request
+          from datetime import datetime, timezone
+
+          commit = os.environ['ANHMAP_COMMIT']
+          url = f'https://raw.githubusercontent.com/Vietflexmap/anhmap/{commit}/index.html'
+          req = urllib.request.Request(url, headers={'User-Agent':'CarbonVN-PMTiles-Sync/1.0'})
+          with urllib.request.urlopen(req, timeout=60) as response:
+              html = response.read().decode('utf-8')
+
+          def script_text(element_id):
+              pattern = rf'<script[^>]*\bid=["\']{re.escape(element_id)}["\'][^>]*>(.*?)</script>'
+              match = re.search(pattern, html, flags=re.I | re.S)
+              if not match:
+                  raise SystemExit(f'Missing embedded element: {element_id}')
+              return match.group(1).strip()
+
+          pm_b64 = re.sub(r'\s+', '', script_text('pmtilesData'))
+          pm_bytes = base64.b64decode(pm_b64, validate=True)
+          if not pm_bytes.startswith(b'PMTiles'):
+              raise SystemExit('Embedded pmtilesData is not a PMTiles archive')
+
+          admin_text = script_text('adminData')
+          admin = json.loads(admin_text)
+          records = admin.get('records', [])
+          if len(records) < 3000:
+              raise SystemExit(f'Unexpected administrative record count: {len(records)}')
+
+          data = pathlib.Path('data')
+          data.mkdir(exist_ok=True)
+          (data / 'vietnam-admin.pmtiles').write_bytes(pm_bytes)
+          (data / 'admin-data.json').write_text(json.dumps(admin, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+          source = {
+              'source_repository': 'Vietflexmap/anhmap',
+              'source_commit': commit,
+              'source_url': url,
+              'pmtiles_bytes': len(pm_bytes),
+              'administrative_records': len(records),
+              'generated_at_utc': datetime.now(timezone.utc).isoformat(),
+              'source_layer': 'admin',
+              'min_data_zoom': 4,
+              'max_data_zoom': 9,
+              'note': 'Generated from the embedded pmtilesData/adminData in AnhMap. Do not edit generated files manually.'
+          }
+          (data / 'anhmap-source.json').write_text(json.dumps(source, ensure_ascii=False, indent=2), encoding='utf-8')
+          print(json.dumps(source, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Commit generated administrative data
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/vietnam-admin.pmtiles data/admin-data.json data/anhmap-source.json
+          if git diff --cached --quiet; then
+            echo 'No administrative data changes.'
+          else
+            git commit -m 'Sync administrative PMTiles from AnhMap'
+            git push
+          fi
