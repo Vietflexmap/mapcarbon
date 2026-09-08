@@ -1,0 +1,11 @@
+{
+  "name": "CarbonVN MRV · Vietflex Map",
+  "short_name": "CarbonVN",
+  "description": "Offline-first WebGIS XCO2, forest MRV and TT31/2026 calculator for Vietnam.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#07150f",
+  "theme_color": "#0d3b2e",
+  "lang": "vi"
+}
