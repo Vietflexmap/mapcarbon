@@ -39,7 +39,7 @@ self.addEventListener("fetch", event => {
     event.respondWith(fetch(event.request).then(response => {
       if (response && response.ok) caches.open(CACHE_NAME).then(cache => cache.put(event.request, response.clone()));
       return response;
-    }).catch(() => caches.match(event.request).then(hit => hit || caches.match(url.pathname.split('/').pop()))));
+    }).catch(() => caches.match(event.request, { ignoreSearch: true })));
     return;
   }
 
