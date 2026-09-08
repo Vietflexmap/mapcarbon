@@ -1,21 +1,53 @@
 "use strict";
-const CACHE_NAME = "mapcarbon-v2.1.0";
-const APP_ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./README.md", "./THIRD_PARTY_NOTICES.md", "./docs/TT31-IMPLEMENTATION.md"];
+const CACHE_NAME = "mapcarbon-v2.3.0";
+const STATIC_ASSETS = [
+  "./",
+  "./index.html",
+  "./manifest.webmanifest",
+  "./README.md",
+  "./THIRD_PARTY_NOTICES.md",
+  "./docs/TT31-IMPLEMENTATION.md",
+  "./docs/ADMIN-PMTILES.md",
+  "./assets/app.js",
+  "./assets/admin-pmtiles.js",
+  "./data/admin-data.json",
+  "./data/anhmap-source.json"
+];
+
 self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS)));
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS)));
   self.skipWaiting();
 });
+
 self.addEventListener("activate", event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))));
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith("mapcarbon-") && k !== CACHE_NAME).map(k => caches.delete(k)))));
   self.clients.claim();
 });
+
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
-  // Không cache/prefetch tile OSM hoặc tài nguyên ngoài origin.
-  if (url.origin !== self.location.origin) return;
-  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-    if (response && response.status === 200) caches.open(CACHE_NAME).then(cache => cache.put(event.request, response.clone()));
-    return response;
-  })));
+
+  // Không cache/prefetch tile OSM công cộng.
+  if (url.hostname === "tile.openstreetmap.org") return;
+
+  // PMTiles hành chính được assets/admin-pmtiles.js cache nguyên archive bằng Cache Storage riêng.
+  if (url.origin === self.location.origin && url.pathname.endsWith("/data/vietnam-admin.pmtiles")) return;
+
+  // Same-origin: cache-first, tự bổ sung file chưa có sau lần tải đầu.
+  if (url.origin === self.location.origin) {
+    event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
+      if (response && response.ok) caches.open(CACHE_NAME).then(cache => cache.put(event.request, response.clone()));
+      return response;
+    })));
+    return;
+  }
+
+  // CDN thư viện (Vietflex/PMTiles/PBF/vector-tile): network-first và lưu bản CORS để tái dùng offline nếu trình duyệt cho phép.
+  if (url.hostname === "cdn.jsdelivr.net") {
+    event.respondWith(fetch(event.request).then(response => {
+      if (response && response.ok) caches.open(CACHE_NAME).then(cache => cache.put(event.request, response.clone()));
+      return response;
+    }).catch(() => caches.match(event.request)));
+  }
 });
