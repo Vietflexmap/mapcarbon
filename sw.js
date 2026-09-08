@@ -1,5 +1,5 @@
 "use strict";
-const CACHE_NAME = "mapcarbon-v2.3.0";
+const CACHE_NAME = "mapcarbon-v2.4.0";
 const STATIC_ASSETS = [
   "./",
   "./index.html",
@@ -20,7 +20,7 @@ self.addEventListener("install", event => {
 });
 
 self.addEventListener("activate", event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith("mapcarbon-") && k !== CACHE_NAME).map(k => caches.delete(k)))));
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith("mapcarbon-") && k !== CACHE_NAME && !k.startsWith("carbonvn-")).map(k => caches.delete(k)))));
   self.clients.claim();
 });
 
@@ -31,10 +31,19 @@ self.addEventListener("fetch", event => {
   // Không cache/prefetch tile OSM công cộng.
   if (url.hostname === "tile.openstreetmap.org") return;
 
-  // PMTiles hành chính được assets/admin-pmtiles.js cache nguyên archive bằng Cache Storage riêng.
+  // PMTiles hành chính do assets/admin-pmtiles.js quản lý trong cache theo source_commit.
   if (url.origin === self.location.origin && url.pathname.endsWith("/data/vietnam-admin.pmtiles")) return;
 
-  // Same-origin: cache-first, tự bổ sung file chưa có sau lần tải đầu.
+  // Provenance + chỉ mục hành chính: network-first để nhận bản sync mới, fallback cache khi offline.
+  if (url.origin === self.location.origin && (url.pathname.endsWith("/data/anhmap-source.json") || url.pathname.endsWith("/data/admin-data.json"))) {
+    event.respondWith(fetch(event.request).then(response => {
+      if (response && response.ok) caches.open(CACHE_NAME).then(cache => cache.put(event.request, response.clone()));
+      return response;
+    }).catch(() => caches.match(event.request).then(hit => hit || caches.match(url.pathname.split('/').pop()))));
+    return;
+  }
+
+  // Same-origin app shell: cache-first, tự bổ sung file chưa có sau lần tải đầu.
   if (url.origin === self.location.origin) {
     event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
       if (response && response.ok) caches.open(CACHE_NAME).then(cache => cache.put(event.request, response.clone()));
@@ -43,7 +52,7 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  // CDN thư viện (Vietflex/PMTiles/PBF/vector-tile): network-first và lưu bản CORS để tái dùng offline nếu trình duyệt cho phép.
+  // CDN thư viện: network-first và runtime-cache để tái dùng offline nếu trình duyệt cho phép.
   if (url.hostname === "cdn.jsdelivr.net") {
     event.respondWith(fetch(event.request).then(response => {
       if (response && response.ok) caches.open(CACHE_NAME).then(cache => cache.put(event.request, response.clone()));
