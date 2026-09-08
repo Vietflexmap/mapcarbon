@@ -11,8 +11,42 @@ const CONFIG = Object.freeze({
   maxDataZoom: 9,
   wardMinDisplayZoom: 7,
   tileSize: 256,
+  cacheName: 'carbonvn-anhmap-pmtiles-v1',
   vietnamBounds: [[7.180931, 102.143914], [23.392643, 117.835457]]
 });
+
+class MemorySource {
+  constructor(bytes, key = 'memory://carbonvn-admin') {
+    this.bytes = bytes;
+    this.key = `${key}-${bytes.byteLength}`;
+  }
+  getKey() { return this.key; }
+  async getBytes(offset, length) {
+    const view = this.bytes.subarray(offset, offset + length);
+    return { data: view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) };
+  }
+}
+
+async function loadArchive(url) {
+  let response;
+  if ('caches' in window) {
+    const cache = await caches.open(CONFIG.cacheName);
+    response = await cache.match(url);
+    if (!response) {
+      response = await fetch(url, { cache: 'no-cache' });
+      if (!response.ok) throw new Error(`PMTiles HTTP ${response.status}`);
+      await cache.put(url, response.clone());
+    }
+  } else {
+    response = await fetch(url);
+    if (!response.ok) throw new Error(`PMTiles HTTP ${response.status}`);
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength < 100 || String.fromCharCode(...bytes.slice(0, 7)) !== 'PMTiles') {
+    throw new Error('Archive hành chính không phải PMTiles hợp lệ.');
+  }
+  return new PMTiles(new MemorySource(bytes, url));
+}
 
 function pointInRing(x, y, ring) {
   let inside = false;
@@ -33,7 +67,8 @@ function pointInFeature(x, y, geometry) {
 
 function lonLatToTilePoint(lng, lat, z, extent) {
   const n = 2 ** z;
-  const sin = Math.sin(Math.max(-85.05112878, Math.min(85.05112878, lat)) * Math.PI / 180);
+  const safeLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+  const sin = Math.sin(safeLat * Math.PI / 180);
   const wx = (lng + 180) / 360 * n;
   const wy = (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * n;
   const tx = Math.floor(wx), ty = Math.floor(wy);
@@ -43,7 +78,7 @@ function lonLatToTilePoint(lng, lat, z, extent) {
 const BoundaryLayer = L.GridLayer.extend({
   initialize(url, options = {}) {
     L.setOptions(this, { tileSize: CONFIG.tileSize, minZoom: 4, maxZoom: 19, noWrap: true, bounds: CONFIG.vietnamBounds, ...options });
-    this.archive = new PMTiles(url);
+    this.archivePromise = loadArchive(url);
     this.decodedTiles = new Map();
     this.selectedIds = new Set();
     this.showProvince = options.showProvince !== false;
@@ -80,7 +115,7 @@ const BoundaryLayer = L.GridLayer.extend({
   _getDecodedTile(z, x, y) {
     const key = `${z}/${x}/${y}`;
     if (!this.decodedTiles.has(key)) {
-      this.decodedTiles.set(key, this.archive.getZxy(z, x, y).then(result => {
+      this.decodedTiles.set(key, this.archivePromise.then(archive => archive.getZxy(z, x, y)).then(result => {
         if (!result) return [];
         const vectorTile = new VectorTile(new Pbf(new Uint8Array(result.data)));
         const layer = vectorTile.layers[CONFIG.sourceLayer];
