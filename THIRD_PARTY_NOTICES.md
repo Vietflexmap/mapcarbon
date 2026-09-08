@@ -17,27 +17,30 @@ Leaflet 1.9.4 — BSD-2-Clause. Vietflex Map is built on Leaflet and preserves L
 PMTiles — BSD-3-Clause.
 
 - Project: https://github.com/protomaps/PMTiles
-- CarbonVN uses the PMTiles format/CLI in the optional administrative-boundary build pipeline.
-- `data/vietnam-admin.pmtiles` is generated from sourced GeoJSON; it is not claimed to originate from `Vietflexmap/anhmap`.
+- CarbonVN uses PMTiles JS to read the administrative vector archive.
+- `assets/admin-pmtiles.js` also uses Mapbox Vector Tile and PBF-compatible JavaScript packages loaded from jsDelivr; their upstream licenses remain applicable.
 
-## Vietnam administrative GIS dataset
-
-Vietnamese Provinces Database by Thang Le Quoc — MIT License.
-
-- Project: https://github.com/thanglequoc/vietnamese-provinces-database
-- CarbonVN uses the post-reorganization administrative metadata and GeoJSON boundary exports for 34 provinces and their ward/commune/special-zone units.
-- Upstream license copyright notice is retained by reference and the upstream MIT terms apply to copied/derived dataset portions.
-
-## Vietflexmap/anhmap
+## Vietflexmap/anhmap — administrative boundaries
 
 - Project: https://github.com/Vietflexmap/anhmap
-- CarbonVN reuses the interaction concept/hierarchy for province → ward/commune lookup and offline-oriented map workflow.
-- At the time of the v2.2 integration, `anhmap` did not expose a standalone `.pmtiles` archive in its repository tree; CarbonVN therefore does not mislabel another geometry source as an `anhmap` PMTiles file.
+- CarbonVN v2.3 reuses the administrative PMTiles payload and administrative index embedded in `anhmap/index.html`.
+- Current source commit: `e80f4ee9f1e167817e4a9af8402c0bca4052573e`.
+- `.github/workflows/sync-anhmap-admin.yml` extracts:
+  - `pmtilesData` → `data/vietnam-admin.pmtiles`;
+  - `adminData` → `data/admin-data.json`.
+- Exact provenance is written to `data/anhmap-source.json`.
+- CarbonVN does not claim ownership over upstream administrative boundary data. Copyright, attribution, license, legal status and source-data conditions inherited by ẢnhMap/Vietflexmap/VN remain applicable.
+
+ẢnhMap's own third-party notice states that its PMTiles/boundary data retain the copyright, license, conditions of use and attribution requirements of their input source and are inherited from `Vietflexmap/VN`. CarbonVN preserves that chain of provenance rather than relicensing the boundary dataset as CarbonVN code.
 
 ## OpenStreetMap
 
-Online basemap tiles are configured from the standard OpenStreetMap tile endpoint. The UI keeps attribution `© OpenStreetMap contributors`. The Service Worker intentionally does not bulk-download, prefetch or cache public OSM tiles for offline use.
+Online basemap tiles use the standard OpenStreetMap endpoint. The UI keeps attribution `© OpenStreetMap contributors`. CarbonVN intentionally does not bulk-download or prefetch public OSM tiles for offline use.
 
 ## External legacy portal
 
-The two HTTP assets at `103.71.96.34:8880` are retained only as optional compatibility configuration. They are not copied into this repository and are not required for the core application.
+The HTTP assets at `103.71.96.34:8880` are retained only as optional compatibility configuration. They are not copied into this repository and are not required by the core application.
+
+## CarbonVN application license
+
+The CarbonVN application code is MIT licensed where stated. That MIT license does not override licenses or usage conditions attached to third-party libraries, map data, administrative boundaries, OSM content or external services.
