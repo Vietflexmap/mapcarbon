@@ -3,35 +3,124 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0d3b2e">
-<title>CarbonVN MRV · Vietflex Map</title>
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Vietflexmap/VN@6144d565fcf236727577ab3c4471bbe49f86892f/dist/vietflex.css">
-<style>
-:root{--bg:#07150f;--panel:#10251b;--panel2:#173326;--line:#28533e;--text:#edf7f1;--muted:#9bc2ac;--accent:#59d98e;--admin:#63b3ff}*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;background:#07150f;color:var(--text)}button,input,select{font:inherit}.app{min-height:100vh;display:grid;grid-template-rows:auto 1fr}.top{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;justify-content:space-between;background:#0b1e15}.brand h1{margin:0;font-size:19px}.brand small,.tiny{color:var(--muted);font-size:11px}.status{display:flex;gap:7px;flex-wrap:wrap}.pill{padding:5px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}.main{display:grid;grid-template-columns:310px minmax(0,1fr) 350px;min-height:0}.side,.calc{padding:12px;overflow:auto;background:#0c1f16}.side{border-right:1px solid var(--line)}.calc{border-left:1px solid var(--line)}.card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px;margin-bottom:10px}.card h3{margin:0 0 9px;font-size:13px}.field{display:grid;gap:4px;margin:6px 0}.field label{font-size:11px;color:var(--muted)}input,select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:#091710;color:var(--text)}button{border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:8px 9px;border-radius:8px;cursor:pointer}button:hover{border-color:var(--accent)}.primary{background:#1f7a4d}.toolbar{display:flex;flex-wrap:wrap;gap:6px}.check{display:flex;gap:7px;align-items:center;color:var(--muted);margin:5px 0}.check input{width:auto}.mapwrap{position:relative;min-height:0}.map{height:100%;min-height:670px;background:#091c14}.legend{position:absolute;z-index:500;bottom:12px;left:12px;background:#10251bea;border:1px solid var(--line);padding:7px 9px;border-radius:9px;font-size:11px}.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}.kpis{display:grid;grid-template-columns:1fr 1fr;gap:7px}.kpi{background:var(--panel2);border-radius:8px;padding:8px}.kpi span{display:block;color:var(--muted);font-size:10px}.kpi strong{font-size:15px}.row{display:grid;grid-template-columns:1fr 1fr;gap:7px}.result{font-size:21px;color:var(--accent);font-weight:800}.admin-status{padding:7px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:11px}.source{font-size:10px;color:var(--muted)}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border-bottom:1px solid var(--line);padding:4px 2px;text-align:left}td input{padding:4px;font-size:11px}.search-results{display:grid;gap:4px;max-height:215px;overflow:auto;margin-top:5px}.search-hit{display:grid;text-align:left;gap:1px;padding:7px;background:#0b2016}.search-hit b{font-size:11px}.search-hit span{font-size:10px;color:var(--muted)}.admin-label-icon{background:transparent!important;border:0!important}.admin-map-label{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;pointer-events:none;text-shadow:0 1px 3px #000,0 0 5px #07150f;color:#d9f1ff;font-weight:650}.province-label{font-size:11px;padding:2px 5px;border-radius:5px;background:#092234b8;border:1px solid #63b3ff66}.ward-label{font-size:9px;color:#d9f5ff}.admin-map-label.selected{color:#fff5a6;background:#463b09d9;border-color:#ffe048;font-weight:800}@media(max-width:1120px){.main{grid-template-columns:280px 1fr}.calc{grid-column:1/-1;border-left:0;border-top:1px solid var(--line)}}@media(max-width:760px){.main{display:block}.side,.calc{border:0}.map{min-height:560px}.legend{max-width:calc(100% - 24px)}}
-</style>
+<meta name="theme-color" content="#f4f7f3">
+<title>CarbonVN · Giám sát CO₂ 34 tỉnh/thành</title>
+<link rel="stylesheet" href="https://vietflexmap.github.io/openmap/dist/vietflex.css?v=20251220e">
+<link rel="stylesheet" href="./styles.css">
 </head>
 <body>
 <div class="app">
-<header class="top"><div class="brand"><h1>CarbonVN MRV · Vietflex Map</h1><small>OCO‑2/CAMS · Forest MRV · 34 tỉnh + 3.321 phường/xã · PMTiles ẢnhMap · TT31 · offline-first</small></div><div class="status"><span class="pill" id="net">…</span><span class="pill" id="adminMode">Admin: chưa nạp</span><span class="pill">v2.4</span></div></header>
-<main class="main">
-<aside class="side">
-<section class="card"><h3>Lớp bản đồ</h3><label class="check"><input id="tBase" type="checkbox" checked>Nền OSM online</label><label class="check"><input id="tProvince" type="checkbox" checked>Ranh giới tỉnh/thành · PMTiles</label><label class="check"><input id="tWard" type="checkbox" checked>Phường/xã/đặc khu · PMTiles</label><label class="check"><input id="tLabels" type="checkbox" checked>Nhãn hành chính thông minh</label><label class="check"><input id="tCO2" type="checkbox" checked>Điểm XCO₂</label><label class="check"><input id="tForest" type="checkbox" checked>Polygon rừng / MRV</label></section>
-<section class="card"><h3>Tra cứu hành chính</h3><div class="field"><label>Tìm nhanh tên / mã / tên cũ</label><input id="adminSearch" type="search" autocomplete="off" placeholder="VD: Vĩnh Thịnh, 12345, tên cũ…"><div id="adminSearchResults" class="search-results"></div></div><div class="field"><label>Tỉnh / thành phố (34)</label><select id="province"><option value="">Đang nạp danh mục…</option></select></div><div class="field"><label>Phường / xã / đặc khu</label><select id="ward" disabled><option value="">Chọn tỉnh trước</option></select></div><div class="toolbar"><button id="loadProvince" class="primary">Xem tỉnh</button><button id="loadWard">Xem phường/xã</button><button id="clearAdmin">Bỏ chọn</button><button id="clearAdminCache" title="Xóa PMTiles/chỉ mục đã cache để tải bản mới">Làm mới dữ liệu</button></div><div id="adminInfo" class="admin-status" style="margin-top:8px">Đang nạp PMTiles hành chính…</div><p class="source">Nguồn: <b>Vietflexmap/anhmap</b> · <span id="sourceInfo">đang đọc provenance…</span>. Search đọc toàn bộ thuộc tính text/số trong chỉ mục nên hỗ trợ cả mã và alias/tên cũ nếu ẢnhMap cung cấp.</p></section>
-<section class="card"><h3>Dữ liệu Carbon</h3><div class="toolbar"><button id="importCsv">Nhập CSV XCO₂</button><button id="exportGeo">Xuất GeoJSON</button><button id="reset">Khôi phục DEMO</button></div><input id="csvFile" hidden type="file" accept=".csv,text/csv"><p class="tiny">CSV: time,province,lat,lon,xco2_ppm,quality,source</p></section>
-<section class="card"><h3>Chỉ số</h3><div class="kpis"><div class="kpi"><span>XCO₂ TB</span><strong id="avg">—</strong></div><div class="kpi"><span>Khoảng</span><strong id="range">—</strong></div><div class="kpi"><span>Điểm</span><strong id="count">—</strong></div><div class="kpi"><span>Vùng rừng</span><strong>5</strong></div></div></section>
-</aside>
-<section class="mapwrap"><div id="map" class="map"></div><div class="legend"><i style="background:#63b3ff"></i>tỉnh <i style="background:#7bd0ff"></i>phường/xã <i style="background:#ffe048"></i>đang chọn · XCO₂ <i style="background:#2e8b57"></i>thấp <i style="background:#cf4b32"></i>cao</div></section>
-<aside class="calc">
-<section class="card"><h3>Polygon rừng đang chọn</h3><div id="selected" class="tiny">Bấm một polygon rừng trên bản đồ.</div></section>
-<section class="card"><h3>Điều 24 · Phương pháp chi phí</h3><div class="row"><div class="field"><label>Cxd</label><input id="cxd" type="number" value="1800000000000"></div><div class="field"><label>Cht đề xuất</label><input id="cht" type="number" value="420000000000"></div></div><div class="row"><div class="field"><label>Kinh phí BV rừng nền</label><input id="forestBudget" type="number" value="2800000000000"></div><div class="field"><label>Thuế/phí T</label><input id="tax" type="number" value="300000000000"></div></div><div class="row"><div class="field"><label>Qp</label><input id="qp" type="number" value="16000000"></div><div class="field"><label>Qn / NDC</label><input id="qn" type="number" value="10000000"></div></div><p class="tiny">Cht áp dụng = min(Cht nhập, 15% kinh phí BV rừng nền); Qc = Qp − Qn.</p><div>Gc: <strong id="gc">—</strong></div></section>
-<section class="card"><h3>Điều 25 · 03 tham chiếu DEMO</h3><table><thead><tr><th>Giá</th><th>K1</th><th>K2</th><th>K3</th></tr></thead><tbody id="refs"></tbody></table><div style="margin-top:7px">Gs: <strong id="gs">—</strong></div></section>
-<section class="card"><h3>Điều 26</h3><div id="final" class="result">—</div><div id="method" class="tiny"></div></section>
-<div class="tiny">XCO₂ DEMO và ranh giới hành chính dùng cho đào tạo/tham khảo; hồ sơ chính thức vẫn cần đối chiếu dữ liệu pháp lý có hiệu lực.</div>
-</aside>
-</main>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">VIETFLEX MAP · CARBON MONITOR</div>
+      <h1>Giám sát & phân tích CO₂ Việt Nam</h1>
+      <p>34 tỉnh/thành · 3.321 xã/phường/đặc khu · dữ liệu KML 63 tỉnh được quy đổi minh bạch</p>
+    </div>
+    <div class="status-row">
+      <span class="status-chip" id="netStatus">Đang kiểm tra mạng</span>
+      <span class="status-chip" id="adminStatus">Hành chính: đang nạp</span>
+      <span class="status-chip source-chip">OpenMap Light</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar left">
+      <section class="panel hero-panel">
+        <div class="section-title">Toàn quốc</div>
+        <div class="kpi-grid">
+          <div class="kpi"><span>34 tỉnh/thành</span><strong id="nationalTotal">—</strong><small>Σ TongCO2 nguồn</small></div>
+          <div class="kpi"><span>Chỉ số chuẩn hóa</span><strong id="nationalIndex">—</strong><small>ΣCO₂ / Σdiện tích × 10.000</small></div>
+          <div class="kpi"><span>Đơn vị cấp xã</span><strong id="adminCount">—</strong><small>chỉ mục hiện hành</small></div>
+          <div class="kpi"><span>Nguồn KML</span><strong>63 → 34</strong><small>quy đổi cấp tỉnh</small></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-title">Tra cứu hành chính</div>
+        <label class="field">Tìm xã / phường / đặc khu
+          <input id="adminSearch" type="search" autocomplete="off" placeholder="Nhập tên hoặc mã…">
+        </label>
+        <div id="searchResults" class="search-results"></div>
+        <label class="field">Tỉnh / thành phố
+          <select id="provinceSelect"><option value="">Đang nạp…</option></select>
+        </label>
+        <label class="field">Xã / phường / đặc khu
+          <select id="wardSelect" disabled><option value="">Chọn tỉnh trước</option></select>
+        </label>
+        <div class="button-row">
+          <button id="zoomProvince" class="primary">Xem tỉnh</button>
+          <button id="zoomWard">Xem đơn vị</button>
+          <button id="clearSelection">Bỏ chọn</button>
+        </div>
+        <div class="small-note" id="adminInfo">Đang đọc PMTiles và chỉ mục hành chính…</div>
+      </section>
+
+      <section class="panel">
+        <div class="section-title">Lớp hiển thị</div>
+        <label class="switch"><input id="toggleProvince" type="checkbox" checked><span>Ranh giới tỉnh/thành</span></label>
+        <label class="switch"><input id="toggleWard" type="checkbox" checked><span>Ranh giới xã/phường/đặc khu</span></label>
+        <label class="switch"><input id="toggleCarbon" type="checkbox" checked><span>CO₂ 34 tỉnh/thành</span></label>
+        <label class="switch"><input id="toggleLabels" type="checkbox" checked><span>Nhãn tỉnh</span></label>
+      </section>
+
+      <section class="panel warning-panel">
+        <div class="section-title">Ý nghĩa dữ liệu</div>
+        <p><b>Không coi đây là ppm hay “CO₂/tháng”.</b> KML nguồn không xác nhận đơn vị/phương pháp và trường ngày đang trống.</p>
+        <p>Hệ thống hiển thị <b>TongCO2 nguồn</b> và một <b>chỉ số chuẩn hóa quy ước</b>. Cấp xã hiện hành là ước tính proxy, luôn có nhãn cảnh báo.</p>
+      </section>
+    </aside>
+
+    <section class="map-area">
+      <div id="map"></div>
+      <div class="map-legend">
+        <div><span class="dot low"></span>Chỉ số thấp</div>
+        <div><span class="dot mid"></span>Trung bình</div>
+        <div><span class="dot high"></span>Cao</div>
+        <div class="legend-note">Màu tương đối theo phân vị của 34 tỉnh, không phải chuẩn chất lượng không khí.</div>
+      </div>
+      <div class="map-badge">Nền sáng: Vietflex OpenMap</div>
+    </section>
+
+    <aside class="sidebar right">
+      <section class="panel selected-panel">
+        <div class="section-title">Đối tượng đang xem</div>
+        <div id="selectedTitle" class="selected-title">Việt Nam</div>
+        <div id="selectedBadge" class="method-badge">Tổng hợp cấp quốc gia</div>
+        <div class="metric-list">
+          <div><span>TongCO2</span><strong id="selTotal">—</strong></div>
+          <div><span>Diện tích nguồn / proxy</span><strong id="selArea">—</strong></div>
+          <div><span>Chỉ số chuẩn hóa</span><strong id="selIndex">—</strong></div>
+        </div>
+        <div id="selectedDescription" class="small-note"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-title">Biểu đồ cấu phần</div>
+        <div id="detailChart" class="chart-box"></div>
+      </section>
+
+      <section class="panel formula-panel">
+        <div class="section-title">Cách tính</div>
+        <div id="formulaBox"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-title">So sánh 34 tỉnh/thành</div>
+        <div id="rankingChart" class="chart-box ranking"></div>
+      </section>
+
+      <section class="panel source-panel">
+        <div class="section-title">Nguồn & provenance</div>
+        <div id="sourceInfo" class="small-note">Đang nạp…</div>
+      </section>
+    </aside>
+  </main>
 </div>
-<script src="https://cdn.jsdelivr.net/gh/Vietflexmap/VN@6144d565fcf236727577ab3c4471bbe49f86892f/dist/vietflex.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.15.0/dist/maplibre-gl.js"></script>
+<script src="https://vietflexmap.github.io/openmap/dist/vietflex-core.js?v=20251220e"></script>
+<script src="https://vietflexmap.github.io/openmap/dist/vietflex.js?v=20251220e"></script>
+<script src="https://vietflexmap.github.io/openmap/plugins/basemaps.js?v=20251220e"></script>
 <script src="./assets/app.js"></script>
 <script type="module" src="./assets/admin-pmtiles.js"></script>
 </body>
