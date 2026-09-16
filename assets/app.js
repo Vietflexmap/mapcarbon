@@ -1,44 +1,582 @@
-const $=s=>document.querySelector(s),fmt=n=>new Intl.NumberFormat('vi-VN',{maximumFractionDigits:2}).format(n||0);
-const CFG={osm:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',portal:{css:'http://103.71.96.34:8880/assets/index-AboC7gkv.css',js:'http://103.71.96.34:8880/assets/index-DtZXQAfN.js'},admin:{meta:'./data/admin-data.json',pmtiles:'./data/vietnam-admin.pmtiles',source:'./data/anhmap-source.json'},pmtilesBasemap:'./data/vietnam.pmtiles'};
-const P=[['Hà Nội',21.0285,105.8542],['Huế',16.4637,107.5909],['Lai Châu',22.3862,103.4703],['Điện Biên',21.386,103.023],['Sơn La',21.327,103.914],['Lạng Sơn',21.8537,106.761],['Cao Bằng',22.6666,106.258],['Tuyên Quang',21.8236,105.214],['Lào Cai',22.4856,103.9707],['Thái Nguyên',21.5942,105.8482],['Phú Thọ',21.3227,105.4019],['Bắc Ninh',21.1861,106.0763],['Hưng Yên',20.6464,106.0511],['Hải Phòng',20.8449,106.6881],['Quảng Ninh',21.0064,107.2925],['Ninh Bình',20.2506,105.9745],['Thanh Hóa',19.8067,105.7852],['Nghệ An',18.6796,105.6813],['Hà Tĩnh',18.3559,105.8877],['Quảng Trị',16.8163,107.1003],['Đà Nẵng',16.0544,108.2022],['Quảng Ngãi',15.1214,108.8044],['Gia Lai',13.9833,108],['Đắk Lắk',12.6667,108.05],['Khánh Hòa',12.2388,109.1967],['Lâm Đồng',11.9404,108.4583],['Đồng Nai',10.9574,106.8427],['Tây Ninh',11.3352,106.1099],['TP.HCM',10.7769,106.7009],['Đồng Tháp',10.4938,105.6882],['Vĩnh Long',10.2537,105.9722],['Cần Thơ',10.0452,105.7469],['An Giang',10.5216,105.1259],['Cà Mau',9.1769,105.1524]];
-function demoCO2(){return {type:'FeatureCollection',features:P.map((p,i)=>({type:'Feature',properties:{id:'demo-'+i,province:p[0],xco2_ppm:+(420.2+(i%8)*1.25+((i*7)%5)*.17).toFixed(2),quality:+(.91+(i%7)*.01).toFixed(2),source:i%2?'CAMS_DEMO':'OCO-2_DEMO',observed_at:'2026-09-'+String(1+i%7).padStart(2,'0')},geometry:{type:'Point',coordinates:[p[2],p[1]]}}))}}
-const forests={type:'FeatureCollection',features:[['Tây Bắc REDD+',21.55,103.55,320000,1600000,400000],['Bắc Trung Bộ',18.7,105.2,410000,2100000,700000],['Tây Nguyên',13.55,108.05,520000,2600000,900000],['Đông Nam Bộ',11.35,107.1,180000,900000,250000],['Cà Mau ngập mặn',9.15,104.95,95000,620000,120000]].map((x,i)=>({type:'Feature',properties:{name:x[0],areaHa:x[3],expectedCredits:x[4],ndcCredits:x[5],standard:i<3?'ART-TREES':'VCS'},geometry:{type:'Polygon',coordinates:[[[x[2]-.42,x[1]-.28],[x[2]+.42,x[1]-.28],[x[2]+.42,x[1]+.28],[x[2]-.42,x[1]+.28],[x[2]-.42,x[1]-.28]]]}}))};
-let map,osm,co2L,forestL,adminLayer,adminLabelLayer,adminRecords=[],provinceNames=[],adminPopup,adminSource=null,adminDataReady=false,co2=JSON.parse(localStorage.getItem('mapcarbon-co2')||'null')||demoCO2();
-const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const normalizeVN=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').toLowerCase().replace(/\s+/g,' ').trim();
-function color(v){return v<421?'#2e8b57':v<423?'#78a641':v<425?'#d0a72c':v<427?'#df7d22':v<429?'#cf4b32':'#8f2d56'}
-function stats(){const a=co2.features.map(f=>+f.properties.xco2_ppm).filter(Number.isFinite);$('#avg').textContent=a.length?fmt(a.reduce((x,y)=>x+y,0)/a.length)+' ppm':'—';$('#range').textContent=a.length?fmt(Math.min(...a))+'–'+fmt(Math.max(...a)):'—';$('#count').textContent=a.length}
-function initMap(){try{map=Vietflex.vietflexMap('map',{zoomControl:false,attributionControl:false}).setView([16.1,106.3],5);new Vietflex.ZoomControl({position:'topleft'}).addTo(map);new Vietflex.AttributionControl({position:'bottomright',prefix:false}).addTo(map);osm=Vietflex.tileLayer(CFG.osm,{maxZoom:19,attribution:'© OpenStreetMap contributors'});if(navigator.onLine)osm.addTo(map);renderCarbon();map.on('zoomend moveend',updateAdminLabels)}catch(e){$('#adminInfo').textContent='Không khởi tạo được Vietflex Map: '+e.message}}
-function renderCarbon(){if(co2L)map.removeLayer(co2L);if(forestL)map.removeLayer(forestL);co2L=Vietflex.geoJSON(co2,{pointToLayer:(f,ll)=>Vietflex.circleMarker(ll,{radius:7,color:'#fff',weight:1,fillColor:color(+f.properties.xco2_ppm),fillOpacity:.86}),onEachFeature:(f,l)=>l.bindPopup(`<b>${escapeHtml(f.properties.province||'XCO₂')}</b><br>${escapeHtml(f.properties.xco2_ppm)} ppm<br>${escapeHtml(f.properties.source||'')}`)});forestL=Vietflex.geoJSON(forests,{style:{color:'#59d98e',weight:2,fillColor:'#1f7a4d',fillOpacity:.18},onEachFeature:(f,l)=>l.on('click',()=>selectForest(f.properties)).bindPopup(`<b>${escapeHtml(f.properties.name)}</b><br>${fmt(f.properties.areaHa)} ha<br>Qp DEMO: ${fmt(f.properties.expectedCredits)}`)});if($('#tCO2').checked)co2L.addTo(map);if($('#tForest').checked)forestL.addTo(map)}
-function selectForest(p){$('#selected').innerHTML=`<b>${escapeHtml(p.name)}</b><br>${fmt(p.areaHa)} ha · ${escapeHtml(p.standard)}`;$('#qp').value=p.expectedCredits;$('#qn').value=p.ndcCredits;calc()}
-async function cachedJSON(url,key){const cache=await caches.open('carbonvn-admin-v3');if(navigator.onLine){try{const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);await cache.put(url,r.clone());return await r.json()}catch(e){console.warn('Admin network refresh failed:',e)}}const hit=await cache.match(url);if(hit){$('#adminMode').textContent='Admin: cache';return await hit.json()}const local=key&&localStorage.getItem(key);if(local){$('#adminMode').textContent='Admin: local';return JSON.parse(local)}throw Error('Không có bản cache cho '+url)}
-async function loadAdminMeta(){try{adminSource=await cachedJSON(CFG.admin.source,'mapcarbon-admin-source');const version=String(adminSource.source_commit||'current').slice(0,12),payload=await cachedJSON(`${CFG.admin.meta}?v=${encodeURIComponent(version)}`,'mapcarbon-admin-meta');adminRecords=Array.isArray(payload)?payload:(payload.records||[]);if(adminRecords.length<3000)throw Error('Chỉ mục hành chính không đầy đủ');provinceNames=[...new Set(adminRecords.map(r=>r.province).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));if(provinceNames.length!==34)throw Error(`Chỉ mục có ${provinceNames.length} tỉnh/thành, kỳ vọng 34`);try{localStorage.setItem('mapcarbon-admin-source',JSON.stringify(adminSource));localStorage.setItem('mapcarbon-admin-meta',JSON.stringify({records:adminRecords}))}catch(e){}$('#province').innerHTML='<option value="">— Chọn tỉnh/thành —</option>'+provinceNames.map(p=>`<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');$('#adminInfo').textContent=`PMTiles ẢnhMap: ${provinceNames.length} tỉnh/thành · ${adminRecords.length.toLocaleString('vi-VN')} phường/xã/đặc khu.`;$('#sourceInfo').textContent=`ẢnhMap ${version} · ${adminSource.pmtiles_bytes?fmt(adminSource.pmtiles_bytes/1048576)+' MB':'PMTiles'}`;adminDataReady=true;restoreAdminSelection();updateAdminLabels();initAdminPMTiles()}catch(e){$('#province').innerHTML='<option value="">Không nạp được chỉ mục</option>';$('#adminInfo').textContent='Chưa nạp được dữ liệu hành chính: '+e.message}}
-function selectedProvince(){return $('#province').value||null}
-function selectedWard(){const id=$('#ward').value;return id?adminRecords.find(r=>String(r.id)===id):null}
-function recordsOfProvince(p){return adminRecords.filter(r=>r.province===p)}
-function bboxOf(records){const boxes=records.map(r=>r.bbox).filter(b=>Array.isArray(b)&&b.length===4).map(b=>b.map(Number));if(!boxes.length)return null;return [Math.min(...boxes.map(b=>b[0])),Math.min(...boxes.map(b=>b[1])),Math.max(...boxes.map(b=>b[2])),Math.max(...boxes.map(b=>b[3]))]}
-function centerOfBbox(b){if(!Array.isArray(b)||b.length!==4)return null;const n=b.map(Number);return [(n[1]+n[3])/2,(n[0]+n[2])/2]}
-function populateWards(){const p=selectedProvince();if(!p){$('#ward').disabled=true;$('#ward').innerHTML='<option value="">Chọn tỉnh trước</option>';updateAdminLabels();return}const rows=recordsOfProvince(p).sort((a,b)=>(a.name||'').localeCompare(b.name||'','vi'));$('#ward').disabled=false;$('#ward').innerHTML='<option value="">— Chọn phường/xã/đặc khu —</option>'+rows.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml((r.type||'')+' '+(r.name||''))}</option>`).join('');$('#adminInfo').textContent=`${p}: ${rows.length} đơn vị cấp xã trong chỉ mục ẢnhMap.`;localStorage.setItem('mapcarbon-admin-selection',JSON.stringify({province:p}));updateAdminLabels()}
-$('#province').onchange=populateWards;
-function showProvince(){const p=selectedProvince();if(!p)return;const b=bboxOf(recordsOfProvince(p));if(adminLayer)adminLayer.setSelectedIds([]);if(b)map.fitBounds([[b[1],b[0]],[b[3],b[2]]],{padding:[24,24],maxZoom:9});const x=co2.features.find(f=>f.properties.province===p)?.properties.xco2_ppm;$('#adminInfo').innerHTML=`Đang xem <b>${escapeHtml(p)}</b> trên PMTiles ẢnhMap.${Number.isFinite(+x)?`<br>XCO₂ DEMO: ${escapeHtml(x)} ppm`:''}`;updateAdminLabels()}
-function showWard(){const r=selectedWard();if(!r)return;if(adminLayer)adminLayer.setSelectedIds([r.id]);if(Array.isArray(r.bbox)&&r.bbox.length===4){const b=r.bbox.map(Number);map.fitBounds([[b[1],b[0]],[b[3],b[2]]],{padding:[38,38],maxZoom:14})}$('#adminInfo').innerHTML=`<b>${escapeHtml((r.type||'')+' '+(r.name||''))}</b> · ${escapeHtml(r.province)}<br>Mã PMTiles: ${escapeHtml(r.id)}`;localStorage.setItem('mapcarbon-admin-selection',JSON.stringify({province:r.province,ward:String(r.id)}));updateAdminLabels()}
-$('#loadProvince').onclick=showProvince;$('#loadWard').onclick=showWard;$('#clearAdmin').onclick=()=>{if(adminLayer)adminLayer.setSelectedIds([]);$('#province').value='';$('#ward').value='';$('#ward').disabled=true;$('#adminSearch').value='';$('#adminSearchResults').innerHTML='';localStorage.removeItem('mapcarbon-admin-selection');$('#adminInfo').textContent='Đã bỏ lựa chọn; lớp ranh giới PMTiles vẫn giữ theo công tắc.';updateAdminLabels()};
-function recordSearchText(r){return normalizeVN(Object.entries(r).filter(([k,v])=>k!=='bbox'&&v!=null&&(typeof v==='string'||typeof v==='number'||Array.isArray(v))).map(([,v])=>Array.isArray(v)?v.join(' '):v).join(' '))}
-function searchAdmin(q){const n=normalizeVN(q);if(n.length<2)return [];return adminRecords.map(r=>{const name=normalizeVN(r.name),province=normalizeVN(r.province),id=normalizeVN(r.id),hay=recordSearchText(r);let score=0;if(name===n)score+=100;if(id===n)score+=95;if(province===n)score+=70;if(name.startsWith(n))score+=50;if(hay.includes(n))score+=20;return {r,score}}).filter(x=>x.score>0).sort((a,b)=>b.score-a.score||(a.r.name||'').localeCompare(b.r.name||'','vi')).slice(0,12).map(x=>x.r)}
-function renderAdminSearch(){const q=$('#adminSearch').value.trim(),box=$('#adminSearchResults');if(q.length<2){box.innerHTML='';return}const rows=searchAdmin(q);box.innerHTML=rows.length?rows.map(r=>`<button type="button" class="search-hit" data-admin-id="${escapeHtml(r.id)}"><b>${escapeHtml((r.type||'')+' '+(r.name||''))}</b><span>${escapeHtml(r.province)} · ${escapeHtml(r.id)}</span></button>`).join(''):'<div class="tiny">Không tìm thấy đơn vị phù hợp.</div>'}
-let searchTimer;$('#adminSearch').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(renderAdminSearch,120)};$('#adminSearch').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();const first=$('#adminSearchResults [data-admin-id]');if(first)first.click()}};$('#adminSearchResults').onclick=e=>{const hit=e.target.closest('[data-admin-id]');if(!hit)return;const r=adminRecords.find(x=>String(x.id)===hit.dataset.adminId);if(!r)return;$('#province').value=r.province;populateWards();$('#ward').value=String(r.id);showWard();$('#adminSearchResults').innerHTML=''};
-function makeLabel(latlng,text,kind,selected=false){return new Vietflex.Marker(latlng,{interactive:false,keyboard:false,icon:new Vietflex.DivIcon({className:'admin-label-icon',html:`<span class="admin-map-label ${kind}${selected?' selected':''}">${escapeHtml(text)}</span>`})})}
-function updateAdminLabels(){if(!map||!adminDataReady)return;if(adminLabelLayer){map.removeLayer(adminLabelLayer);adminLabelLayer=null}if(!$('#tLabels').checked)return;adminLabelLayer=new Vietflex.LayerGroup();const z=map.getZoom(),p=selectedProvince(),w=selectedWard();if(z<8||!p){for(const province of provinceNames){const c=centerOfBbox(bboxOf(recordsOfProvince(province)));if(c)makeLabel(c,province,'province-label',province===p).addTo(adminLabelLayer)}}else{const rows=recordsOfProvince(p);if(z<10){const c=centerOfBbox(bboxOf(rows));if(c)makeLabel(c,p,'province-label',true).addTo(adminLabelLayer)}else{for(const r of rows){const c=centerOfBbox(r.bbox);if(c)makeLabel(c,`${r.type||''} ${r.name||''}`.trim(),'ward-label',w&&String(w.id)===String(r.id)).addTo(adminLabelLayer)}}}adminLabelLayer.addTo(map)}
-function refreshAdminVisibility(){if(!map||!adminLayer)return;const province=$('#tProvince').checked,ward=$('#tWard').checked;adminLayer.setVisibility({province,ward});if((province||ward)&&!map.hasLayer(adminLayer))adminLayer.addTo(map);if(!province&&!ward&&map.hasLayer(adminLayer))map.removeLayer(adminLayer);localStorage.setItem('mapcarbon-layer-state',JSON.stringify({province,ward,labels:$('#tLabels').checked,base:$('#tBase').checked,co2:$('#tCO2').checked,forest:$('#tForest').checked}));updateAdminLabels()}
-function restoreLayerState(){try{const s=JSON.parse(localStorage.getItem('mapcarbon-layer-state')||'null');if(!s)return;for(const [id,key] of [['tProvince','province'],['tWard','ward'],['tLabels','labels'],['tBase','base'],['tCO2','co2'],['tForest','forest']])if(typeof s[key]==='boolean')$('#'+id).checked=s[key]}catch(e){}}
-function restoreAdminSelection(){try{const s=JSON.parse(localStorage.getItem('mapcarbon-admin-selection')||'null');if(!s)return;if(s.province&&provinceNames.includes(s.province)){$('#province').value=s.province;populateWards();if(s.ward){$('#ward').value=String(s.ward);if(adminLayer)showWard()}}}catch(e){}}
-async function initAdminPMTiles(){if(!map||adminLayer||!window.CarbonAdminPMTiles||!adminDataReady)return;try{const version=String(adminSource?.source_commit||'current').slice(0,12),url=`${CFG.admin.pmtiles}?v=${encodeURIComponent(version)}`;adminLayer=window.CarbonAdminPMTiles.createLayer(url,{showProvince:$('#tProvince').checked,showWard:$('#tWard').checked,attribution:'Ranh giới © Vietflexmap/anhmap'});refreshAdminVisibility();$('#adminMode').textContent='Admin: PMTiles ẢnhMap';restoreAdminSelection();map.on('click',async e=>{try{const hits=await adminLayer.query(e.latlng,map.getZoom());if(!hits.length)return;const p=hits[0],record=p.id!=null?adminRecords.find(r=>String(r.id)===String(p.id)):null;if(record){$('#province').value=record.province;populateWards();$('#ward').value=String(record.id);adminLayer.setSelectedIds([record.id]);localStorage.setItem('mapcarbon-admin-selection',JSON.stringify({province:record.province,ward:String(record.id)}));updateAdminLabels()}const title=record?`${record.type||''} ${record.name||''}`:(p.name||p.Name||'Đơn vị hành chính'),province=record?.province||p.province||'';adminPopup=Vietflex.popup({maxWidth:300}).setLatLng(e.latlng).setContent(`<b>${escapeHtml(title)}</b><br>${escapeHtml(province)}${p.level?`<br>Cấp PMTiles: ${escapeHtml(p.level)}`:''}${p.id!=null?`<br>ID: ${escapeHtml(p.id)}`:''}`).openOn(map)}catch(err){console.warn('Admin PMTiles query:',err)}})}catch(e){$('#adminMode').textContent='Admin: lỗi PMTiles';$('#adminInfo').textContent='Không mở được vietnam-admin.pmtiles: '+e.message}}
-window.addEventListener('carbon-admin-pmtiles-ready',initAdminPMTiles);
-[['tProvince',null],['tWard',null],['tLabels',null]].forEach(([id])=>$('#'+id).onchange=refreshAdminVisibility);[['tCO2',()=>co2L],['tForest',()=>forestL]].forEach(([id,get])=>$('#'+id).onchange=e=>{const l=get();if(!map||!l)return;e.target.checked?l.addTo(map):map.removeLayer(l);refreshAdminVisibility()});$('#tBase').onchange=e=>{if(!map||!osm)return;if(e.target.checked&&navigator.onLine)osm.addTo(map);else if(map.hasLayer(osm))map.removeLayer(osm);refreshAdminVisibility()};
-$('#clearAdminCache').onclick=async()=>{try{await Promise.all(['carbonvn-admin-v2','carbonvn-admin-v3','carbonvn-anhmap-pmtiles-v1','carbonvn-anhmap-pmtiles-v2'].map(n=>caches.delete(n)));localStorage.removeItem('mapcarbon-admin-meta');localStorage.removeItem('mapcarbon-admin-source');$('#adminInfo').textContent='Đã xóa cache hành chính. Đang tải lại dữ liệu mới…';setTimeout(()=>location.reload(),350)}catch(e){$('#adminInfo').textContent='Không xóa được cache: '+e.message}};
-function parseCSV(t){const lines=t.trim().split(/\r?\n/),h=lines.shift().split(',').map(x=>x.trim());const ix=n=>h.indexOf(n);return {type:'FeatureCollection',features:lines.filter(Boolean).map((r,i)=>{const a=r.split(',').map(x=>x.trim()),lat=+a[ix('lat')],lon=+a[ix('lon')],x=+a[ix('xco2_ppm')];if(!Number.isFinite(lat+lon+x))throw Error('CSV không hợp lệ ở dòng '+(i+2));return {type:'Feature',properties:{province:a[ix('province')],xco2_ppm:x,quality:+a[ix('quality')]||null,source:a[ix('source')]||'CSV',observed_at:a[ix('time')]||''},geometry:{type:'Point',coordinates:[lon,lat]}}})}}
-function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)}
-$('#importCsv').onclick=()=>$('#csvFile').click();$('#csvFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader;r.onload=()=>{try{co2=parseCSV(r.result);localStorage.setItem('mapcarbon-co2',JSON.stringify(co2));stats();renderCarbon()}catch(err){alert(err.message)}};r.readAsText(f)};$('#exportGeo').onclick=()=>dl('carbonvn-xco2.geojson',JSON.stringify(co2,null,2),'application/geo+json');$('#reset').onclick=()=>{co2=demoCO2();localStorage.removeItem('mapcarbon-co2');stats();renderCarbon()};
-const refs=[[270000,1.2,1,1.2],[310000,1,1.2,1],[250000,1.2,.8,1.2]];function renderRefs(){const tb=$('#refs');tb.innerHTML='';refs.forEach((r,i)=>{const tr=document.createElement('tr');tr.innerHTML=r.map((v,j)=>`<td><input data-i="${i}" data-j="${j}" type="number" step="0.1" value="${v}"></td>`).join('');tb.appendChild(tr)});tb.querySelectorAll('input').forEach(x=>x.oninput=e=>{refs[+e.target.dataset.i][+e.target.dataset.j]=+e.target.value;calc()})}
-function calc(){const n=id=>+$('#'+id).value||0,cxd=n('cxd'),cht=n('cht'),budget=n('forestBudget'),tax=n('tax'),qp=n('qp'),qn=n('qn'),qc=qp-qn,ca=Math.min(cht,budget*.15),gc=qc>0?(cxd+ca+tax)/qc:NaN,gs=refs.length>=3?refs.reduce((s,r)=>s+r[0]*(r[1]+r[2]+r[3])/3,0)/refs.length:NaN;$('#gc').textContent=Number.isFinite(gc)?fmt(gc)+' đ/tín chỉ':'Không hợp lệ';$('#gs').textContent=Number.isFinite(gs)?fmt(gs)+' đ/tín chỉ':'Không đủ 03 dự án';const g=Number.isFinite(gs)?Math.max(gc,gs):gc;$('#final').textContent=Number.isFinite(g)?fmt(g)+' đ/tín chỉ':'—';$('#method').textContent=Number.isFinite(gs)?(gc>=gs?'Điều 26: chọn Gc':'Điều 26: chọn Gs'):'Không đủ so sánh → dùng Gc';localStorage.setItem('mapcarbon-tt31',JSON.stringify({cxd,cht,budget,tax,qp,qn}))}
-['cxd','cht','forestBudget','tax','qp','qn'].forEach(id=>$('#'+id).oninput=calc);function net(){const on=navigator.onLine;$('#net').textContent=on?'Online · OSM':'Offline · cache';if(map&&osm){if(on&&$('#tBase').checked&&!map.hasLayer(osm))osm.addTo(map);if(!on&&map.hasLayer(osm))map.removeLayer(osm)}}window.addEventListener('online',()=>{net();loadAdminMeta()});window.addEventListener('offline',net);if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});restoreLayerState();renderRefs();stats();calc();net();initMap();loadAdminMeta();if(window.CarbonAdminPMTiles)initAdminPMTiles();
+const $ = (s) => document.querySelector(s);
+const fmt = (n, digits = 2) => Number.isFinite(+n)
+  ? new Intl.NumberFormat('vi-VN', { maximumFractionDigits: digits }).format(+n)
+  : '—';
+const compact = (n) => Number.isFinite(+n)
+  ? new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 2 }).format(+n)
+  : '—';
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[c]));
+
+const CFG = {
+  carbon: './data/co2-34.json',
+  admin: {
+    meta: './data/admin-data.json',
+    pmtiles: './data/vietnam-admin.pmtiles',
+    source: './data/anhmap-source.json'
+  },
+  openmapBasePath: 'https://vietflexmap.github.io/openmap/'
+};
+
+let map;
+let carbonData = null;
+let carbonLayer = null;
+let labelLayer = null;
+let adminLayer = null;
+let adminSource = null;
+let adminRecords = [];
+let provinceNames = [];
+let selectedProvinceName = '';
+let selectedWardId = '';
+
+const normalizeVN = (v) => String(v ?? '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+  .toLowerCase()
+  .replace(/\b(thanh pho|tinh|tp\.?)\b/g, '')
+  .replace(/[._-]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const aliasNorm = (v) => {
+  const n = normalizeVN(v);
+  if (['hcm', 'ho chi minh', 'tp hcm'].includes(n)) return 'ho chi minh';
+  if (['thua thien hue', 'hue'].includes(n)) return 'hue';
+  return n;
+};
+
+function setNetworkStatus() {
+  const el = $('#netStatus');
+  el.textContent = navigator.onLine ? 'Online' : 'Offline / cache';
+  el.classList.toggle('offline', !navigator.onLine);
+}
+window.addEventListener('online', setNetworkStatus);
+window.addEventListener('offline', setNetworkStatus);
+setNetworkStatus();
+
+async function getJSON(url) {
+  const r = await fetch(url, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
+  return r.json();
+}
+
+function carbonProvinceFromAdmin(name) {
+  if (!carbonData) return null;
+  const needle = aliasNorm(name);
+  return carbonData.provinces.find(p => aliasNorm(p.province) === needle) || null;
+}
+
+function bboxAreaKm2(bbox) {
+  if (!Array.isArray(bbox) || bbox.length !== 4) return 0;
+  const [w, s, e, n] = bbox.map(Number);
+  if (![w, s, e, n].every(Number.isFinite) || e <= w || n <= s) return 0;
+  const R = 6371.0088;
+  const dLon = Math.abs(e - w) * Math.PI / 180;
+  const sinDelta = Math.abs(Math.sin(n * Math.PI / 180) - Math.sin(s * Math.PI / 180));
+  return R * R * dLon * sinDelta;
+}
+
+function bboxOf(records) {
+  const boxes = records.map(r => r.bbox).filter(b => Array.isArray(b) && b.length === 4).map(b => b.map(Number));
+  if (!boxes.length) return null;
+  return [
+    Math.min(...boxes.map(b => b[0])),
+    Math.min(...boxes.map(b => b[1])),
+    Math.max(...boxes.map(b => b[2])),
+    Math.max(...boxes.map(b => b[3]))
+  ];
+}
+
+function centerOfBbox(b) {
+  if (!Array.isArray(b) || b.length !== 4) return null;
+  const [w, s, e, n] = b.map(Number);
+  return [(s + n) / 2, (w + e) / 2];
+}
+
+function recordsOfProvince(name) {
+  return adminRecords.filter(r => r.province === name);
+}
+
+function carbonColor(value) {
+  if (!carbonData) return '#4b8a68';
+  const values = carbonData.provinces.map(p => +p.normalized_index).filter(Number.isFinite).sort((a, b) => a - b);
+  if (!values.length) return '#4b8a68';
+  const q = (pct) => values[Math.min(values.length - 1, Math.floor((values.length - 1) * pct))];
+  if (value <= q(.2)) return '#2e8b57';
+  if (value <= q(.4)) return '#75a948';
+  if (value <= q(.6)) return '#c7a936';
+  if (value <= q(.8)) return '#d87832';
+  return '#b33d45';
+}
+
+function bubbleRadius(value) {
+  const vals = carbonData.provinces.map(p => +p.normalized_index).filter(Number.isFinite);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi <= lo) return 9;
+  return 6 + 8 * Math.sqrt(Math.max(0, Math.min(1, (value - lo) / (hi - lo))));
+}
+
+function htmlBars(items, valueKey = 'total', maxRows = 8) {
+  const rows = [...items].sort((a, b) => (+b[valueKey] || 0) - (+a[valueKey] || 0)).slice(0, maxRows);
+  const max = Math.max(1, ...rows.map(x => +x[valueKey] || 0));
+  return `<div class="mini-bars">${rows.map(x => `
+    <div class="mini-row">
+      <span title="${esc(x.name)}">${esc(x.name)}</span>
+      <div class="mini-track" title="${esc(x.name)}: ${esc(fmt(x[valueKey]))}">
+        <div class="mini-fill" style="width:${Math.max(2, (+x[valueKey] || 0) / max * 100)}%"></div>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+function provincePopup(p) {
+  return `<div class="carbon-popup">
+    <h3>${esc(p.province)}</h3>
+    <div class="popup-badge">Quy đổi hành chính 63 → 34</div>
+    <div class="popup-grid">
+      <span>TongCO2</span><b>${esc(fmt(p.total_co2))}</b>
+      <span>Dientich nguồn</span><b>${esc(fmt(p.area_source))}</b>
+      <span>Chỉ số chuẩn hóa</span><b>${esc(fmt(p.normalized_index, 4))}</b>
+      <span>Cấu phần tỉnh cũ</span><b>${p.components.length}</b>
+    </div>
+    ${htmlBars(p.components, 'total', 6)}
+    <div class="popup-formula">Index = ΣTongCO2 / ΣDientich × 10.000</div>
+    <div class="popup-note">Biểu đồ là cơ cấu TongCO2 của các tỉnh cũ hợp thành. Đơn vị CO₂ của KML chưa được xác nhận; không diễn giải thành ppm hoặc CO₂/tháng.</div>
+  </div>`;
+}
+
+function wardEstimate(record) {
+  const p = carbonProvinceFromAdmin(record.province);
+  if (!p) return null;
+  const siblings = recordsOfProvince(record.province);
+  const weights = siblings.map(r => bboxAreaKm2(r.bbox));
+  const sumWeight = weights.reduce((a, b) => a + b, 0);
+  let weight = bboxAreaKm2(record.bbox);
+  let share;
+  let method;
+  if (sumWeight > 0 && weight > 0) {
+    share = weight / sumWeight;
+    method = 'bbox-area-proxy';
+  } else {
+    share = siblings.length ? 1 / siblings.length : 0;
+    method = 'equal-share-fallback';
+    weight = 0;
+  }
+  return {
+    province: p,
+    share,
+    proxy_bbox_km2: weight,
+    source_area_est: p.area_source * share,
+    total_est: p.total_co2 * share,
+    normalized_index: p.normalized_index,
+    method
+  };
+}
+
+function wardPopup(record, est) {
+  const title = `${record.type || ''} ${record.name || ''}`.trim();
+  const sharePct = est ? est.share * 100 : 0;
+  return `<div class="carbon-popup">
+    <h3>${esc(title)}</h3>
+    <div class="popup-badge">Ước tính cấp xã hiện hành · proxy</div>
+    <div class="popup-grid">
+      <span>Tỉnh/thành</span><b>${esc(record.province || '')}</b>
+      <span>TongCO2 ước tính</span><b>${esc(est ? fmt(est.total_est) : '—')}</b>
+      <span>Tỷ trọng proxy</span><b>${esc(est ? fmt(sharePct, 4) + '%' : '—')}</b>
+      <span>Diện tích bbox proxy</span><b>${esc(est ? fmt(est.proxy_bbox_km2) + ' km²' : '—')}</b>
+      <span>Chỉ số tỉnh tham chiếu</span><b>${esc(est ? fmt(est.normalized_index, 4) : '—')}</b>
+    </div>
+    <div class="mini-bars">
+      <div class="mini-row"><span>Đơn vị</span><div class="mini-track"><div class="mini-fill" style="width:${Math.max(1, Math.min(100, sharePct))}%"></div></div></div>
+      <div class="mini-row"><span>Phần còn lại</span><div class="mini-track"><div class="mini-fill" style="width:${Math.max(1, 100 - Math.min(100, sharePct))}%"></div></div></div>
+    </div>
+    <div class="popup-formula">CO₂_đơn_vị ≈ CO₂_tỉnh × A_bbox_đơn_vị / ΣA_bbox_trong_tỉnh</div>
+    <div class="popup-note">Đây là phân bổ mô hình để drill-down tới 3.321 xã/phường/đặc khu, không phải trạm đo tại địa phương. Muốn kiểm kê chính thức cần crosswalk hình học và metadata đơn vị/phương pháp.</div>
+  </div>`;
+}
+
+function chartRows(items, labelKey, valueKey, maxRows = 10) {
+  const rows = [...items].sort((a, b) => (+b[valueKey] || 0) - (+a[valueKey] || 0)).slice(0, maxRows);
+  const max = Math.max(1, ...rows.map(x => +x[valueKey] || 0));
+  return rows.map(x => `<div class="chart-row">
+    <div class="chart-label" title="${esc(x[labelKey])}">${esc(x[labelKey])}</div>
+    <div class="bar-track"><div class="bar" style="width:${Math.max(1.5, (+x[valueKey] || 0) / max * 100)}%"></div></div>
+    <div class="chart-value">${esc(compact(x[valueKey]))}</div>
+  </div>`).join('');
+}
+
+function setNationalPanel() {
+  if (!carbonData) return;
+  selectedProvinceName = '';
+  selectedWardId = '';
+  $('#selectedTitle').textContent = 'Việt Nam';
+  $('#selectedBadge').textContent = 'Tổng hợp 34 tỉnh/thành';
+  $('#selTotal').textContent = fmt(carbonData.national.total_co2);
+  $('#selArea').textContent = fmt(carbonData.national.area_source);
+  $('#selIndex').textContent = fmt(carbonData.national.normalized_index, 4);
+  $('#selectedDescription').innerHTML = 'Tổng cấp quốc gia được tính lại từ <b>63 bản ghi tỉnh/thành cũ</b> trong KML. Không cộng thêm các bản ghi huyện/xã để tránh đếm trùng.';
+  $('#detailChart').innerHTML = chartRows(carbonData.provinces, 'province', 'total_co2', 10);
+  $('#formulaBox').innerHTML = `<div class="formula">NationalIndex = Σ TongCO2₍34₎ / Σ Dientich₍34₎ × 10.000</div>
+    <div class="formula-caption">Mỗi tỉnh mới đã được cộng từ đúng các tỉnh cũ cấu thành; sau đó chỉ số được tính lại theo tổng, không lấy trung bình đơn giản.</div>`;
+}
+
+function selectProvince(p, openPopup = false) {
+  if (!p) return;
+  selectedProvinceName = p.province;
+  selectedWardId = '';
+  $('#selectedTitle').textContent = p.province;
+  $('#selectedBadge').textContent = p.components.length > 1 ? `Quy đổi từ ${p.components.length} tỉnh/thành cũ` : 'Giữ nguyên địa giới cấp tỉnh';
+  $('#selTotal').textContent = fmt(p.total_co2);
+  $('#selArea').textContent = fmt(p.area_source);
+  $('#selIndex').textContent = fmt(p.normalized_index, 4);
+  $('#selectedDescription').textContent = `${p.province}: TongCO2 và Dientich được cộng từ ${p.source_provinces.join(', ')}.`;
+  $('#detailChart').innerHTML = chartRows(p.components, 'name', 'total', 10);
+  $('#formulaBox').innerHTML = `<div class="formula">Index₍${esc(p.province)}₎ = ${esc(compact(p.total_co2))} / ${esc(compact(p.area_source))} × 10.000 = ${esc(fmt(p.normalized_index, 4))}</div>
+    <div class="formula-caption">TongCO2 mới = Σ TongCO2 các tỉnh cũ; Dientich mới = Σ Dientich các tỉnh cũ.</div>`;
+  renderLabels();
+
+  const adminName = provinceNames.find(n => aliasNorm(n) === aliasNorm(p.province));
+  if (adminName && $('#provinceSelect').value !== adminName) {
+    $('#provinceSelect').value = adminName;
+    populateWards();
+  }
+
+  if (openPopup && map) {
+    const marker = carbonLayer && carbonLayer._layers
+      ? Object.values(carbonLayer._layers).find(l => l.__province === p.province)
+      : null;
+    if (marker && marker.openPopup) marker.openPopup();
+  }
+}
+
+function selectWard(record, latlng = null, openPopup = true) {
+  if (!record) return;
+  const est = wardEstimate(record);
+  selectedProvinceName = record.province;
+  selectedWardId = String(record.id);
+  const title = `${record.type || ''} ${record.name || ''}`.trim();
+  $('#selectedTitle').textContent = title;
+  $('#selectedBadge').textContent = 'Ước tính proxy cấp xã hiện hành';
+  $('#selTotal').textContent = est ? fmt(est.total_est) : '—';
+  $('#selArea').textContent = est ? `${fmt(est.source_area_est)} (phân bổ nguồn)` : '—';
+  $('#selIndex').textContent = est ? `${fmt(est.normalized_index, 4)} (tham chiếu tỉnh)` : '—';
+  $('#selectedDescription').innerHTML = est
+    ? `Tỷ trọng proxy <b>${fmt(est.share * 100, 4)}%</b> được suy ra từ diện tích bbox của đơn vị so với tổng bbox trong ${esc(record.province)}.`
+    : 'Không tìm được bản ghi CO₂ cấp tỉnh tương ứng.';
+  $('#detailChart').innerHTML = est ? `
+    <div class="chart-row"><div class="chart-label">Đơn vị</div><div class="bar-track"><div class="bar" style="width:${Math.max(1, est.share * 100)}%"></div></div><div class="chart-value">${fmt(est.share * 100, 3)}%</div></div>
+    <div class="chart-row"><div class="chart-label">Còn lại tỉnh</div><div class="bar-track"><div class="bar" style="width:${Math.max(1, (1-est.share) * 100)}%"></div></div><div class="chart-value">${fmt((1-est.share) * 100, 3)}%</div></div>` : '';
+  $('#formulaBox').innerHTML = `<div class="formula">CO₂₍đơn vị₎ ≈ CO₂₍tỉnh₎ × A_bbox₍đơn vị₎ / ΣA_bbox₍tỉnh₎</div>
+    <div class="formula-caption">Để bảo toàn tổng, Dientich nguồn của tỉnh cũng được phân bổ theo cùng tỷ trọng. Đây là mô hình drill-down, không thay cho phép đo/kiểm kê địa phương.</div>`;
+
+  if (adminLayer && adminLayer.setSelectedIds) adminLayer.setSelectedIds([record.id]);
+  renderLabels();
+
+  if ($('#provinceSelect').value !== record.province) {
+    $('#provinceSelect').value = record.province;
+    populateWards();
+  }
+  $('#wardSelect').value = String(record.id);
+
+  if (openPopup && map && est) {
+    const center = latlng || centerOfBbox(record.bbox);
+    if (center) {
+      Vietflex.popup({ maxWidth: 330 })
+        .setLatLng(center)
+        .setContent(wardPopup(record, est))
+        .openOn(map);
+    }
+  }
+}
+
+function renderCarbon() {
+  if (!map || !carbonData) return;
+  if (carbonLayer && map.hasLayer && map.hasLayer(carbonLayer)) map.removeLayer(carbonLayer);
+  carbonLayer = new Vietflex.LayerGroup();
+
+  for (const p of carbonData.provinces) {
+    const [lon, lat] = p.center;
+    const marker = Vietflex.circleMarker([lat, lon], {
+      radius: bubbleRadius(+p.normalized_index),
+      color: '#ffffff',
+      weight: 1.4,
+      fillColor: carbonColor(+p.normalized_index),
+      fillOpacity: .88
+    });
+    marker.__province = p.province;
+    marker.bindPopup(provincePopup(p), { maxWidth: 340 });
+    marker.on('click', () => selectProvince(p));
+    marker.addTo(carbonLayer);
+  }
+
+  if ($('#toggleCarbon').checked) carbonLayer.addTo(map);
+  renderLabels();
+}
+
+function renderLabels() {
+  if (!map || !carbonData) return;
+  if (labelLayer && map.hasLayer && map.hasLayer(labelLayer)) map.removeLayer(labelLayer);
+  labelLayer = null;
+  if (!$('#toggleLabels').checked) return;
+  labelLayer = new Vietflex.LayerGroup();
+  const z = map.getZoom ? map.getZoom() : 5;
+  for (const p of carbonData.provinces) {
+    if (z < 5.4 && p.components.length === 1 && p.province !== selectedProvinceName) continue;
+    const [lon, lat] = p.center;
+    const selected = aliasNorm(p.province) === aliasNorm(selectedProvinceName);
+    const icon = new Vietflex.DivIcon({
+      className: 'admin-label-icon',
+      html: `<span class="admin-map-label${selected ? ' selected' : ''}">${esc(p.province)}</span>`
+    });
+    new Vietflex.Marker([lat, lon], { interactive: false, keyboard: false, icon }).addTo(labelLayer);
+  }
+  labelLayer.addTo(map);
+}
+
+function refreshAdminVisibility() {
+  if (!adminLayer || !map) return;
+  const showProvince = $('#toggleProvince').checked;
+  const showWard = $('#toggleWard').checked;
+  adminLayer.setVisibility({ province: showProvince, ward: showWard });
+  if ((showProvince || showWard) && map.hasLayer && !map.hasLayer(adminLayer)) adminLayer.addTo(map);
+  if (!showProvince && !showWard && map.hasLayer && map.hasLayer(adminLayer)) map.removeLayer(adminLayer);
+}
+
+function initMap() {
+  map = Vietflex.vietflexMap({
+    container: 'map',
+    center: [106.3, 16.2],
+    zoom: 5.15,
+    pitch: 0,
+    bearing: 0,
+    basemap: 'light',
+    basePath: CFG.openmapBasePath,
+    minZoom: 2,
+    renderWorldCopies: false,
+    enableBasemapControl: false
+  });
+
+  if (map.on) {
+    map.on('zoomend', renderLabels);
+    map.on('moveend', renderLabels);
+  }
+}
+
+function populateProvinceSelect() {
+  $('#provinceSelect').innerHTML = '<option value="">— Chọn tỉnh/thành —</option>' +
+    provinceNames.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+}
+
+function populateWards() {
+  const p = $('#provinceSelect').value;
+  const select = $('#wardSelect');
+  if (!p) {
+    select.disabled = true;
+    select.innerHTML = '<option value="">Chọn tỉnh trước</option>';
+    return;
+  }
+  const rows = recordsOfProvince(p).sort((a, b) => `${a.type || ''} ${a.name || ''}`.localeCompare(`${b.type || ''} ${b.name || ''}`, 'vi'));
+  select.disabled = false;
+  select.innerHTML = '<option value="">— Chọn xã/phường/đặc khu —</option>' +
+    rows.map(r => `<option value="${esc(r.id)}">${esc(`${r.type || ''} ${r.name || ''}`.trim())}</option>`).join('');
+  $('#adminInfo').textContent = `${p}: ${rows.length.toLocaleString('vi-VN')} đơn vị cấp xã trong chỉ mục hiện hành.`;
+}
+
+function zoomProvince() {
+  const adminName = $('#provinceSelect').value;
+  if (!adminName) return;
+  const rows = recordsOfProvince(adminName);
+  const b = bboxOf(rows);
+  if (b) map.fitBounds([[b[1], b[0]], [b[3], b[2]]], { padding: [28, 28], maxZoom: 9 });
+  const p = carbonProvinceFromAdmin(adminName);
+  if (p) selectProvince(p);
+  if (adminLayer && adminLayer.setSelectedIds) adminLayer.setSelectedIds([]);
+}
+
+function zoomWard() {
+  const id = $('#wardSelect').value;
+  const r = adminRecords.find(x => String(x.id) === String(id));
+  if (!r) return;
+  if (Array.isArray(r.bbox) && r.bbox.length === 4) {
+    const b = r.bbox.map(Number);
+    map.fitBounds([[b[1], b[0]], [b[3], b[2]]], { padding: [36, 36], maxZoom: 14 });
+  }
+  selectWard(r, null, true);
+}
+
+function clearSelection() {
+  $('#provinceSelect').value = '';
+  $('#wardSelect').value = '';
+  $('#wardSelect').disabled = true;
+  $('#wardSelect').innerHTML = '<option value="">Chọn tỉnh trước</option>';
+  $('#adminSearch').value = '';
+  $('#searchResults').innerHTML = '';
+  if (adminLayer && adminLayer.setSelectedIds) adminLayer.setSelectedIds([]);
+  setNationalPanel();
+  renderLabels();
+  if (map.setView) map.setView([16.2, 106.3], 5.15);
+}
+
+function recordSearchText(r) {
+  const vals = [];
+  for (const [k, v] of Object.entries(r)) {
+    if (k === 'bbox' || v == null) continue;
+    if (typeof v === 'string' || typeof v === 'number') vals.push(v);
+    else if (Array.isArray(v)) vals.push(v.join(' '));
+  }
+  return normalizeVN(vals.join(' '));
+}
+
+function searchAdmin(q) {
+  const n = normalizeVN(q);
+  if (n.length < 2) return [];
+  return adminRecords.map(r => {
+    const name = normalizeVN(r.name);
+    const id = normalizeVN(r.id);
+    const hay = recordSearchText(r);
+    let score = 0;
+    if (name === n) score += 100;
+    if (id === n) score += 90;
+    if (name.startsWith(n)) score += 55;
+    if (hay.includes(n)) score += 20;
+    return { r, score };
+  }).filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score || String(a.r.name).localeCompare(String(b.r.name), 'vi'))
+    .slice(0, 12).map(x => x.r);
+}
+
+function renderSearch() {
+  const q = $('#adminSearch').value.trim();
+  const box = $('#searchResults');
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  const rows = searchAdmin(q);
+  box.innerHTML = rows.length ? rows.map(r => `
+    <button class="search-result" data-id="${esc(r.id)}">
+      <b>${esc(`${r.type || ''} ${r.name || ''}`.trim())}</b>
+      <span>${esc(r.province || '')} · ${esc(r.id)}</span>
+    </button>`).join('') : '<div class="small-note">Không tìm thấy.</div>';
+}
+
+async function initAdminPMTiles() {
+  if (!map || adminLayer || !window.CarbonAdminPMTiles || !adminRecords.length) return;
+  try {
+    adminLayer = window.CarbonAdminPMTiles.createLayer(CFG.admin.pmtiles, {
+      showProvince: $('#toggleProvince').checked,
+      showWard: $('#toggleWard').checked,
+      attribution: 'Ranh giới © Vietflexmap/anhmap'
+    });
+    refreshAdminVisibility();
+    $('#adminStatus').textContent = 'Hành chính: PMTiles';
+
+    map.on('click', async (e) => {
+      try {
+        if (!adminLayer || !adminLayer.query) return;
+        const hits = await adminLayer.query(e.latlng, map.getZoom());
+        if (!hits || !hits.length) return;
+        const hit = hits[0];
+        const record = hit.id != null ? adminRecords.find(r => String(r.id) === String(hit.id)) : null;
+        if (!record) return;
+        selectWard(record, e.latlng, true);
+      } catch (err) {
+        console.warn('PMTiles query:', err);
+      }
+    });
+  } catch (err) {
+    $('#adminStatus').textContent = 'Hành chính: lỗi PMTiles';
+    $('#adminInfo').textContent = `Không mở được PMTiles: ${err.message}`;
+  }
+}
+window.addEventListener('carbon-admin-pmtiles-ready', initAdminPMTiles);
+
+function renderSourceInfo() {
+  const s = carbonData.source;
+  $('#sourceInfo').innerHTML = `
+    <b>KML:</b> ${esc(s.title)}<br>
+    <b>Cấu trúc:</b> ${fmt(s.source_counts.province, 0)} tỉnh · ${fmt(s.source_counts.district, 0)} huyện · ${fmt(s.source_counts.commune, 0)} xã cũ.<br>
+    <b>URL ghi trong KML:</b> ${esc(s.source_url || 'không có')}<br>
+    <b>Xuất KML:</b> ${esc(s.exported_at_utc || 'không có')}<br>
+    <b>Giới hạn:</b> ${esc(s.interpretation_note || '')}<br>
+    <b>Hành chính:</b> Vietflexmap/anhmap · 34 tỉnh/thành · ${adminRecords.length ? adminRecords.length.toLocaleString('vi-VN') : '…'} xã/phường/đặc khu.`;
+}
+
+function bindUI() {
+  $('#provinceSelect').addEventListener('change', () => {
+    populateWards();
+    const p = carbonProvinceFromAdmin($('#provinceSelect').value);
+    if (p) selectProvince(p);
+  });
+  $('#wardSelect').addEventListener('change', () => {
+    const r = adminRecords.find(x => String(x.id) === String($('#wardSelect').value));
+    if (r) selectWard(r, null, false);
+  });
+  $('#zoomProvince').onclick = zoomProvince;
+  $('#zoomWard').onclick = zoomWard;
+  $('#clearSelection').onclick = clearSelection;
+
+  let t;
+  $('#adminSearch').addEventListener('input', () => {
+    clearTimeout(t);
+    t = setTimeout(renderSearch, 100);
+  });
+  $('#searchResults').addEventListener('click', e => {
+    const btn = e.target.closest('[data-id]');
+    if (!btn) return;
+    const r = adminRecords.find(x => String(x.id) === String(btn.dataset.id));
+    if (!r) return;
+    $('#provinceSelect').value = r.province;
+    populateWards();
+    $('#wardSelect').value = String(r.id);
+    zoomWard();
+    $('#searchResults').innerHTML = '';
+  });
+
+  $('#toggleProvince').onchange = refreshAdminVisibility;
+  $('#toggleWard').onchange = refreshAdminVisibility;
+  $('#toggleLabels').onchange = renderLabels;
+  $('#toggleCarbon').onchange = (e) => {
+    if (!carbonLayer || !map) return;
+    if (e.target.checked) carbonLayer.addTo(map);
+    else if (map.hasLayer && map.hasLayer(carbonLayer)) map.removeLayer(carbonLayer);
+  };
+}
+
+async function bootstrap() {
+  bindUI();
+  initMap();
+
+  try {
+    const [carbon, admin, source] = await Promise.all([
+      getJSON(CFG.carbon),
+      getJSON(CFG.admin.meta),
+      getJSON(CFG.admin.source).catch(() => ({}))
+    ]);
+    carbonData = carbon;
+    adminRecords = Array.isArray(admin) ? admin : (admin.records || []);
+    adminSource = source || {};
+    provinceNames = [...new Set(adminRecords.map(r => r.province).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
+
+    if (provinceNames.length !== 34) {
+      console.warn(`Chỉ mục hành chính có ${provinceNames.length} tỉnh/thành; kỳ vọng 34.`);
+    }
+
+    $('#nationalTotal').textContent = compact(carbonData.national.total_co2);
+    $('#nationalIndex').textContent = fmt(carbonData.national.normalized_index, 2);
+    $('#adminCount').textContent = adminRecords.length.toLocaleString('vi-VN');
+    $('#adminInfo').textContent = `${provinceNames.length} tỉnh/thành · ${adminRecords.length.toLocaleString('vi-VN')} xã/phường/đặc khu.`;
+    $('#adminStatus').textContent = `Hành chính: ${provinceNames.length}/${adminRecords.length.toLocaleString('vi-VN')}`;
+
+    populateProvinceSelect();
+    setNationalPanel();
+    $('#rankingChart').innerHTML = chartRows(carbonData.provinces, 'province', 'total_co2', 12);
+    renderCarbon();
+    renderSourceInfo();
+    initAdminPMTiles();
+  } catch (err) {
+    console.error(err);
+    $('#adminStatus').textContent = 'Lỗi dữ liệu';
+    $('#adminInfo').textContent = err.message;
+    $('#sourceInfo').textContent = `Không nạp được dữ liệu: ${err.message}`;
+  }
+}
+
+bootstrap();
